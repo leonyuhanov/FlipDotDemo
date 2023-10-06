@@ -1,0 +1,336 @@
+<html>
+<title>P5JS MIDI Toy</title>
+
+<style>
+.custDIVClass
+{
+	margin: 0px;
+	padding: 0px;
+	background-color: #000000;
+	border: 1px solid #aaaaaa;
+	z-index: 2;
+} 
+.sliderClass
+{
+	height: 50;
+	width:	100px;
+}
+#container {
+  position: relative;
+}
+#container canvas, #overlay {
+  position: absolute;
+}
+canvas {
+  border: 1px solid black;
+}
+</style>
+
+<body>
+
+<div id='container'>
+  <canvas id='mainCanvas'></canvas>
+  <div id='overlay'>
+  </div>
+</div>
+
+</body>
+<script src="p5.js"></script>
+<script language="JavaScript">
+
+class MIDIMapper
+{	
+	constructor()
+	{
+		this.midiMapArray = new Array();
+		this.numberOfItems=0;
+		this.innerCounter=0;
+	}
+	addItem =  function(MIDIChan, CCID, controlName, scaleToValue)
+	{
+		this.midiMapArray.push([MIDIChan, CCID, controlName, 0, 0, scaleToValue])
+		this.numberOfItems = this.midiMapArray.length;
+	}
+	scaleTo = function(value, scaleTo)
+	{
+		return (value/127)*scaleTo;
+	}
+	onMidiEvent = function(midiData)
+	{
+		for(this.innerCounter=0; this.innerCounter<this.numberOfItems; this.innerCounter++)
+		{
+			if(midiData.data[0] == this.midiMapArray[this.innerCounter][0] && midiData.data[1] == this.midiMapArray[this.innerCounter][1])
+			{
+				//Actual midi value 0-127
+				this.midiMapArray[this.innerCounter][3] = midiData.data[2];
+				//scaled value for application use
+				this.midiMapArray[this.innerCounter][4] = this.scaleTo( midiData.data[2], this.midiMapArray[this.innerCounter][5] );
+				//console.log(this.midiMapArray[this.innerCounter][2]+"->"+this.midiMapArray[this.innerCounter][3]+" "+this.midiMapArray[this.innerCounter][4]);
+				return;
+			}
+		}
+	}
+	setValue = function(controlName, value)
+	{
+		for(this.innerCounter=0; this.innerCounter<this.numberOfItems; this.innerCounter++)
+		{
+			if(this.midiMapArray[this.innerCounter][2]==controlName)
+			{
+				//Scaled value used by the application
+				this.midiMapArray[this.innerCounter][4] = value;
+				//Midi value 0-127 from the above scaled value
+				this.midiMapArray[this.innerCounter][3] = value*127;
+				return;
+			}
+		}
+	}
+	getValue = function(controlName)
+	{
+		for(this.innerCounter=0; this.innerCounter<this.numberOfItems; this.innerCounter++)
+		{
+			if(this.midiMapArray[this.innerCounter][2]==controlName)
+			{
+				return this.midiMapArray[this.innerCounter][4];
+			}
+		}
+	}
+}
+
+class CCGenerator
+{	
+	constructor(maxValue, colourBlockCount, rgbColourArray)
+	{
+		this._primaryColours = new Array();
+		this._currentColour = [0,0,0];
+		this._colourTable = [[0,0,0],[0,0,0],[0,0,0]];
+		this._modifierTable = [[0,0,0],[0,0,0]];
+		this._colourBlockCount=0;
+		this._coloursPerBlock=0;
+		this._bandWidth=0;
+		this._cnt=0;
+		this._primColIndex=0;
+		this._rgba="";
+	
+		this._colourBlockCount = colourBlockCount;
+		this._primaryColours = new Array(this._colourBlockCount);
+		for(this._cnt=0; this._cnt<this._colourBlockCount; this._cnt++)
+	    {
+			this._primaryColours[this._cnt] = new Array(3);
+	    }
+		//Init the Colour Table
+		for(this._cnt=0; this._cnt<3; this._cnt++)
+		{
+			this._colourTable[this._cnt][0] = 0;
+			this._colourTable[this._cnt][1] = 0;
+			this._colourTable[this._cnt][2] = 0;
+		}
+		//Init the Modofier Table
+		for(this._cnt=0; this._cnt<2; this._cnt++)
+		{
+			this._modifierTable[this._cnt][0] = 0;
+			this._modifierTable[this._cnt][1] = 0;
+			this._modifierTable[this._cnt][2] = 0;
+		}	
+		//number of colours between 1 block and its neighbour    
+		this._coloursPerBlock = maxValue;
+		//Total number of colours in this spectrum
+		this._bandWidth = this._coloursPerBlock * this._colourBlockCount;
+		//Fill out primary colours based on array passed
+		for(this._cnt=0; this._cnt<colourBlockCount; this._cnt++)
+		{
+			this._primaryColours[this._cnt][0] = rgbColourArray[this._cnt*3];
+			this._primaryColours[this._cnt][1] = rgbColourArray[(this._cnt*3)+1];
+			this._primaryColours[this._cnt][2] = rgbColourArray[(this._cnt*3)+2];
+		}
+	}
+	
+	getColour = function(colourIndex)
+	{
+		this._primColIndex = Math.floor(colourIndex/this._coloursPerBlock) ;
+		this._colourTable[0][0] = this._primaryColours[this._primColIndex][0]; 
+		this._colourTable[0][1] = this._primaryColours[this._primColIndex][1];
+		this._colourTable[0][2] = this._primaryColours[this._primColIndex][2];
+		
+		this._colourTable[1][0] = this._primaryColours[(this._primColIndex+1)%this._colourBlockCount][0]; 
+		this._colourTable[1][1] = this._primaryColours[(this._primColIndex+1)%this._colourBlockCount][1]; 
+		this._colourTable[1][2] = this._primaryColours[(this._primColIndex+1)%this._colourBlockCount][2];
+				
+		this.gradientGenerator(colourIndex%this._coloursPerBlock, this._coloursPerBlock);
+		
+		this._currentColour[0] = this._colourTable[2][0];
+		this._currentColour[1] = this._colourTable[2][1];
+		this._currentColour[2] = this._colourTable[2][2];		
+	}
+	
+	getRGBA = function(colourIndex)
+	{
+		this.getColour(colourIndex);
+		this._rgba = 'rgba('+this._currentColour[0]+','+this._currentColour[1]+','+this._currentColour[2]+',1)';
+	}
+	
+	gradientGenerator = function(colourIndex, bandWidth)
+	{
+		for(this._cnt=0; this._cnt<3; this._cnt++)
+		{
+			//fill modifier
+			if(this._colourTable[1][this._cnt]>this._colourTable[0][this._cnt]) { this._modifierTable[0][this._cnt]=1; }
+			else if(this._colourTable[1][this._cnt]<this._colourTable[0][this.cnt]) { this._modifierTable[0][this._cnt]=-1; }
+			else if(this._colourTable[1][this._cnt]==this._colourTable[0][this._cnt]) { this._modifierTable[0][this._cnt]=0; }
+
+			//fill step value
+			if(this._modifierTable[0][this._cnt]==1)
+			{
+			 this._modifierTable[1][this._cnt] = this._colourTable[1][this._cnt] - this._colourTable[0][this._cnt];
+			}
+			else if(this._modifierTable[0][this._cnt]==-1)
+			{
+			  this._modifierTable[1][this._cnt] = this._colourTable[0][this._cnt] - this._colourTable[1][this._cnt];
+			}
+			else if(this._modifierTable[0][this._cnt]==0)
+			{
+			  this._modifierTable[1][this._cnt] = 0;
+			}
+			//calculate current gradient between 2 based on the percentile index
+			this._colourTable[2][this._cnt] = this._colourTable[0][this._cnt] + ((this._modifierTable[1][this._cnt]*(colourIndex/bandWidth))*this._modifierTable[0][this._cnt]);
+		}
+  }
+}
+
+var screenDimensions = [window.innerWidth-20, window.innerHeight-20];
+var totalLayers = 100, distanceBetweenLayers = 20;
+var totalObjects = 200, layerObjects=0;
+var objectDecrementPerLayer = 0.01;
+var objectCounter=0, layerCounter=0;
+var centrePoints = [0, 0];
+var degreesPerObject = 0;
+var degCounter=0;
+var zedPoint=0;
+var maxRadius = 500, radiusSpacing = 24, radiousIndex=0;
+var slowCounter = 0, slowBy = 0.1;
+
+//colours
+var maxValue = 250;
+var maxColourDitherSteps = 128;
+var colourList = [maxValue,0,0, maxValue,maxValue,0, 0,maxValue,0, 0,maxValue,maxValue, 0,0,maxValue, maxValue,0,maxValue, maxValue,maxValue,maxValue];
+var cIndex=0, cIncrement=1, innerCIndex=0;
+let cObjectOne = new CCGenerator(maxColourDitherSteps, 7, colourList);
+
+
+//Midi vars
+let MIDISTore = new MIDIMapper();
+
+//-------------MIDI FUNCTIONS--------------------------
+function onMIDISuccess(midiAccess)
+{
+    console.log(midiAccess);
+
+    var inputs = midiAccess.inputs;
+    var outputs = midiAccess.outputs;
+	
+	for(var input of midiAccess.inputs.values())
+	{
+        input.onmidimessage = getMIDIMessage;
+    }
+}
+function onMIDIFailure()
+{
+    console.log('Could not access your MIDI devices.');
+}
+function getMIDIMessage(midiMessage) 
+{
+	//console.log(midiMessage.data[1]+" "+midiMessage.data[2]);
+	MIDISTore.onMidiEvent(midiMessage)
+}
+//-------------MIDI FUNCTIONS--------------------------
+
+function setup() 
+{
+	createCanvas(screenDimensions[0], screenDimensions[1], WEBGL, document.getElementById('mainCanvas'));
+	navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+	//setup what midi controlls to use
+	MIDISTore.addItem(176,1,"oDec_Slider", 1);
+	MIDISTore.setValue("oDec_Slider", 0.5);
+	
+	MIDISTore.addItem(176,9,"colourIncrement", 100);
+	MIDISTore.setValue("colourIncrement", 1);
+	MIDISTore.addItem(176,10,"innerColourIncrement", 100);
+	MIDISTore.setValue("innerColourIncrement", 1);
+
+	MIDISTore.addItem(176,2,"distanceBetweenLayers", 200);
+	MIDISTore.setValue("distanceBetweenLayers", 20);
+	
+	MIDISTore.addItem(176,3,"totalObjects", 500);
+	MIDISTore.setValue("totalObjects", 100);
+	
+	MIDISTore.addItem(176,4,"totalLayers", 500);
+	MIDISTore.setValue("totalLayers", 100);
+	
+	MIDISTore.addItem(176,5,"maxRadius", 1000);
+	MIDISTore.setValue("maxRadius", 500);
+	
+	MIDISTore.addItem(176,6,"radiusSpacing", 200);
+	MIDISTore.setValue("radiusSpacing", 24);
+	
+
+}
+
+function draw() 
+{
+	background(0);
+	orbitControl();
+	let colourObject = color(255, 0, 0, 255);
+	ambientLight(255);
+	
+	
+	zedPoint=0;
+	objectDecrementPerLayer = MIDISTore.getValue("oDec_Slider");
+	distanceBetweenLayers = MIDISTore.getValue("distanceBetweenLayers");
+	totalObjects = MIDISTore.getValue("totalObjects");
+	totalLayers = MIDISTore.getValue("totalLayers");
+	maxRadius = MIDISTore.getValue("maxRadius");
+	radiusSpacing = MIDISTore.getValue("radiusSpacing");
+	
+	for(layerCounter=0; layerCounter<totalLayers; layerCounter++)
+	{
+		layerObjects = totalObjects - ((layerCounter*objectDecrementPerLayer)*totalObjects);
+		zedPoint = distanceBetweenLayers*layerCounter;
+		degreesPerObject = 360/layerObjects;
+		radiousIndex = maxRadius-(radiusSpacing*layerCounter);
+		
+		for(objectCounter=0; objectCounter<layerObjects; objectCounter++)
+		{
+			cObjectOne.getColour(innerCIndex%cObjectOne._bandWidth);
+			colourObject.setRed(cObjectOne._currentColour[0]);
+			colourObject.setGreen(cObjectOne._currentColour[1]);
+			colourObject.setBlue(cObjectOne._currentColour[2]);
+			innerCIndex += MIDISTore.getValue("innerColourIncrement");//cIncrement;
+			push();
+			centrePoints = getCircularPoints(0, 0, radiousIndex, ((degreesPerObject*objectCounter)+slowCounter)%360);
+			translate(centrePoints[0], centrePoints[1], zedPoint);
+			ambientMaterial(colourObject);
+			box(5, 5, 5);
+			pop();
+		}
+	}
+	cIndex += MIDISTore.getValue("colourIncrement");
+	innerCIndex = cIndex;
+	/*
+	if(frameCount%slowBy==slowBy-1)
+	{
+		slowCounter++;
+	}
+	*/
+	slowCounter = frameCount * slowBy;
+}
+
+function getCircularPoints(circleX, circleY, circleR, angleFromTopLeftoRight)
+{
+	var circCoOrds = [0, 0];
+	circCoOrds[0] = circleX + Math.sin(angleFromTopLeftoRight*(Math.PI / 180))*circleR ;
+	circCoOrds[1] = circleY - Math.cos(angleFromTopLeftoRight*(Math.PI / 180))*circleR;
+	return circCoOrds;
+}
+
+
+</script>
+</html> 
