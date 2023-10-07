@@ -1,0 +1,453 @@
+<html>
+<title>P5JS MIDI Toy</title>
+
+<style>
+.custDIVClass
+{
+	margin: 0px;
+	padding: 0px;
+	background-color: #000000;
+	border: 1px solid #aaaaaa;
+	z-index: 2;
+} 
+.sliderClass
+{
+	height: 50;
+	width:	100px;
+}
+#container {
+  position: relative;
+}
+#container canvas, #overlay {
+  position: absolute;
+}
+canvas {
+  border: 1px solid black;
+}
+</style>
+
+<body>
+
+<div id='container'>
+  <canvas id='mainCanvas'></canvas>
+  <div id='overlay'>
+  </div>
+</div>
+
+</body>
+<script src="p5.js"></script>
+<script language="JavaScript">
+
+class objectTracker
+{	
+	constructor(numberOfItems)
+	{
+		this.objectArray = new Array();
+		this.numberOfItems=0;
+		this.innerCounter=0;
+		this.midiKeyRange = [48,84]; //37 keys
+		this.randomRange = [100,100,100,100,100,100];
+		
+		for(this.innerCounter=0; this.innerCounter<numberOfItems; this.innerCounter++)
+		{
+			this.objectArray.push([0,0,0,0,0,0,0,this.midiKeyRange[0]+this.innerCounter], 0,0,0);
+		}
+		this.numberOfItems = this.objectArray.length;
+	}
+	reset =  function(internalID)
+	{
+		for(this.innerCounter=0; this.innerCounter<this.numberOfItems; this.innerCounter++)
+		{
+			if(this.objectArray[this.innerCounter][7]==internalID)
+			{
+				//reset position
+				this.objectArray[this.innerCounter][0] = 0;
+				this.objectArray[this.innerCounter][1] = 0;
+				this.objectArray[this.innerCounter][2] = 0;
+				//reset colour
+				this.objectArray[this.innerCounter][3] = 0;
+				this.objectArray[this.innerCounter][4] = 0;
+				this.objectArray[this.innerCounter][5] = 0;
+				this.objectArray[this.innerCounter][6] = 0;
+				//reset size
+				this.objectArray[this.innerCounter][8] = 0;
+				this.objectArray[this.innerCounter][9] = 0;
+				this.objectArray[this.innerCounter][10] = 0;
+				return;
+			}
+		}
+	}
+	randomizePostion = function(internalID)
+	{
+		for(this.innerCounter=0; this.innerCounter<this.numberOfItems; this.innerCounter++)
+		{
+			if(this.objectArray[this.innerCounter][7]==internalID)
+			{
+				//random position
+				this.objectArray[this.innerCounter][0] = Math.round(Math.random()*this.randomRange[0]);
+				this.objectArray[this.innerCounter][1] = Math.round(Math.random()*this.randomRange[1]);
+				this.objectArray[this.innerCounter][2] = Math.round(Math.random()*this.randomRange[2]);
+				//random size
+				this.objectArray[this.innerCounter][8] = Math.round(Math.random()*this.randomRange[3]);
+				this.objectArray[this.innerCounter][9] = Math.round(Math.random()*this.randomRange[4]);
+				this.objectArray[this.innerCounter][10] = Math.round(Math.random()*this.randomRange[5]);
+				return;
+			}
+		}
+	}
+	setColour = function(internalID, redV, greenV, blueV, alphaV)
+	{
+		for(this.innerCounter=0; this.innerCounter<this.numberOfItems; this.innerCounter++)
+		{
+			if(this.objectArray[this.innerCounter][7]==internalID)
+			{
+				this.objectArray[this.innerCounter][3] = redV;
+				this.objectArray[this.innerCounter][4] = greenV;
+				this.objectArray[this.innerCounter][5] = blueV;
+				this.objectArray[this.innerCounter][6] = alphaV;
+			}
+		}
+	}
+}
+
+class MIDIMapper
+{	
+	constructor()
+	{
+		this.midiMapArray = new Array();
+		this.numberOfItems=0;
+		this.innerCounter=0;
+		this.lastKeyHit=0;
+		this.lastKeyReleased=0;
+		this.midiKeyRange = [48,84];
+	}
+	addItem =  function(MIDIChan, CCID, controlName, scaleToValue)
+	{
+		this.midiMapArray.push([MIDIChan, CCID, controlName, 0, 0, scaleToValue])
+		this.numberOfItems = this.midiMapArray.length;
+	}
+	scaleTo = function(value, scaleTo)
+	{
+		return (value/127)*scaleTo;
+	}
+	onMidiEvent = function(midiData)
+	{
+		//Hadnle Midi Keys
+		this.handleKeys(midiData.data[0], midiData.data[1], midiData.data[2]);
+		//Handle all other stored controlls
+		for(this.innerCounter=0; this.innerCounter<this.numberOfItems; this.innerCounter++)
+		{
+			if(midiData.data[0] == this.midiMapArray[this.innerCounter][0] && midiData.data[1] == this.midiMapArray[this.innerCounter][1])
+			{
+				//Actual midi value 0-127
+				this.midiMapArray[this.innerCounter][3] = midiData.data[2];
+				//scaled value for application use
+				this.midiMapArray[this.innerCounter][4] = this.scaleTo( midiData.data[2], this.midiMapArray[this.innerCounter][5] );
+				
+				//console.log(this.midiMapArray[this.innerCounter][2]+"->"+this.midiMapArray[this.innerCounter][3]+" "+this.midiMapArray[this.innerCounter][4]);
+				return;
+			}
+		}
+	}
+	setValue = function(controlName, value)
+	{
+		for(this.innerCounter=0; this.innerCounter<this.numberOfItems; this.innerCounter++)
+		{
+			if(this.midiMapArray[this.innerCounter][2]==controlName)
+			{
+				//Scaled value used by the application
+				this.midiMapArray[this.innerCounter][4] = value;
+				//Midi value 0-127 from the above scaled value
+				this.midiMapArray[this.innerCounter][3] = value*127;
+				return;
+			}
+		}
+	}
+	getValue = function(controlName)
+	{
+		for(this.innerCounter=0; this.innerCounter<this.numberOfItems; this.innerCounter++)
+		{
+			if(this.midiMapArray[this.innerCounter][2]==controlName)
+			{
+				return this.midiMapArray[this.innerCounter][4];
+			}
+		}
+	}
+	handleKeys = function(midiID, ccID, velocity)
+	{
+		if(ccID>=this.midiKeyRange[0] && ccID<=this.midiKeyRange[1])
+		{
+			if(midiID==144)
+			{
+				this.lastKeyHit = ccID;
+			}
+			else if (midiID==128)
+			{
+				this.lastKeyReleased = ccID;
+			}
+		}
+	}
+}
+
+class CCGenerator
+{	
+	constructor(maxValue, colourBlockCount, rgbColourArray)
+	{
+		this._primaryColours = new Array();
+		this._currentColour = [0,0,0];
+		this._colourTable = [[0,0,0],[0,0,0],[0,0,0]];
+		this._modifierTable = [[0,0,0],[0,0,0]];
+		this._colourBlockCount=0;
+		this._coloursPerBlock=0;
+		this._bandWidth=0;
+		this._cnt=0;
+		this._primColIndex=0;
+		this._rgba="";
+	
+		this._colourBlockCount = colourBlockCount;
+		this._primaryColours = new Array(this._colourBlockCount);
+		for(this._cnt=0; this._cnt<this._colourBlockCount; this._cnt++)
+	    {
+			this._primaryColours[this._cnt] = new Array(3);
+	    }
+		//Init the Colour Table
+		for(this._cnt=0; this._cnt<3; this._cnt++)
+		{
+			this._colourTable[this._cnt][0] = 0;
+			this._colourTable[this._cnt][1] = 0;
+			this._colourTable[this._cnt][2] = 0;
+		}
+		//Init the Modofier Table
+		for(this._cnt=0; this._cnt<2; this._cnt++)
+		{
+			this._modifierTable[this._cnt][0] = 0;
+			this._modifierTable[this._cnt][1] = 0;
+			this._modifierTable[this._cnt][2] = 0;
+		}	
+		//number of colours between 1 block and its neighbour    
+		this._coloursPerBlock = maxValue;
+		//Total number of colours in this spectrum
+		this._bandWidth = this._coloursPerBlock * this._colourBlockCount;
+		//Fill out primary colours based on array passed
+		for(this._cnt=0; this._cnt<colourBlockCount; this._cnt++)
+		{
+			this._primaryColours[this._cnt][0] = rgbColourArray[this._cnt*3];
+			this._primaryColours[this._cnt][1] = rgbColourArray[(this._cnt*3)+1];
+			this._primaryColours[this._cnt][2] = rgbColourArray[(this._cnt*3)+2];
+		}
+	}
+	
+	getColour = function(colourIndex)
+	{
+		this._primColIndex = Math.floor(colourIndex/this._coloursPerBlock) ;
+		this._colourTable[0][0] = this._primaryColours[this._primColIndex][0]; 
+		this._colourTable[0][1] = this._primaryColours[this._primColIndex][1];
+		this._colourTable[0][2] = this._primaryColours[this._primColIndex][2];
+		
+		this._colourTable[1][0] = this._primaryColours[(this._primColIndex+1)%this._colourBlockCount][0]; 
+		this._colourTable[1][1] = this._primaryColours[(this._primColIndex+1)%this._colourBlockCount][1]; 
+		this._colourTable[1][2] = this._primaryColours[(this._primColIndex+1)%this._colourBlockCount][2];
+				
+		this.gradientGenerator(colourIndex%this._coloursPerBlock, this._coloursPerBlock);
+		
+		this._currentColour[0] = this._colourTable[2][0];
+		this._currentColour[1] = this._colourTable[2][1];
+		this._currentColour[2] = this._colourTable[2][2];		
+	}
+	
+	getRGBA = function(colourIndex)
+	{
+		this.getColour(colourIndex);
+		this._rgba = 'rgba('+this._currentColour[0]+','+this._currentColour[1]+','+this._currentColour[2]+',1)';
+	}
+	
+	gradientGenerator = function(colourIndex, bandWidth)
+	{
+		for(this._cnt=0; this._cnt<3; this._cnt++)
+		{
+			//fill modifier
+			if(this._colourTable[1][this._cnt]>this._colourTable[0][this._cnt]) { this._modifierTable[0][this._cnt]=1; }
+			else if(this._colourTable[1][this._cnt]<this._colourTable[0][this.cnt]) { this._modifierTable[0][this._cnt]=-1; }
+			else if(this._colourTable[1][this._cnt]==this._colourTable[0][this._cnt]) { this._modifierTable[0][this._cnt]=0; }
+
+			//fill step value
+			if(this._modifierTable[0][this._cnt]==1)
+			{
+			 this._modifierTable[1][this._cnt] = this._colourTable[1][this._cnt] - this._colourTable[0][this._cnt];
+			}
+			else if(this._modifierTable[0][this._cnt]==-1)
+			{
+			  this._modifierTable[1][this._cnt] = this._colourTable[0][this._cnt] - this._colourTable[1][this._cnt];
+			}
+			else if(this._modifierTable[0][this._cnt]==0)
+			{
+			  this._modifierTable[1][this._cnt] = 0;
+			}
+			//calculate current gradient between 2 based on the percentile index
+			this._colourTable[2][this._cnt] = this._colourTable[0][this._cnt] + ((this._modifierTable[1][this._cnt]*(colourIndex/bandWidth))*this._modifierTable[0][this._cnt]);
+		}
+  }
+}
+
+var screenDimensions = [window.innerWidth-40, window.innerHeight-40];
+var centrePoints = [0, 0];
+var slowCounter = 0, slowBy = 0.1;
+
+//colours
+var maxValue = 255;
+var maxColourDitherSteps = 128;
+var colourList = [maxValue,0,0, maxValue,maxValue,0, 0,maxValue,0, 0,maxValue,maxValue, 0,0,maxValue, maxValue,0,maxValue, maxValue,maxValue,maxValue];
+var cIndex=0, cIncrement=1, innerCIndex=0;
+let cObjectOne = new CCGenerator(maxColourDitherSteps, 7, colourList);
+
+
+//Midi vars
+let MIDISTore = new MIDIMapper();
+var objectData = [0,0,0,0];
+var objectTrackers = new objectTracker(37);
+
+
+//-------------MIDI FUNCTIONS--------------------------
+function onMIDISuccess(midiAccess)
+{
+    console.log(midiAccess);
+
+    var inputs = midiAccess.inputs;
+    var outputs = midiAccess.outputs;
+	
+	for(var input of midiAccess.inputs.values())
+	{
+        input.onmidimessage = getMIDIMessage;
+    }
+}
+function onMIDIFailure()
+{
+    console.log('Could not access your MIDI devices.');
+}
+function getMIDIMessage(midiMessage) 
+{
+	//console.log(midiMessage.data[0]+" "+midiMessage.data[1]+" "+midiMessage.data[2]);
+	MIDISTore.onMidiEvent(midiMessage)
+}
+//-------------MIDI FUNCTIONS--------------------------
+
+function setup() 
+{
+	createCanvas(screenDimensions[0], screenDimensions[1], WEBGL, document.getElementById('mainCanvas'));
+	navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+	
+	//setup what midi controlls to use
+	MIDISTore.addItem(176,9,"alphaFader", 100);
+	MIDISTore.setValue("alphaFader", 11);
+	
+	MIDISTore.addItem(176,10,"movementFader", 200);
+	MIDISTore.setValue("movementFader", 70);
+
+	MIDISTore.addItem(176,25,"slowBy", 1);
+	MIDISTore.setValue("slowBy", 0.1);
+	
+	MIDISTore.addItem(176,24,"colourIncrement", 100);
+	MIDISTore.setValue("colourIncrement", 1);
+
+	//random ranges
+	MIDISTore.addItem(176,1,"xRange", 3000);
+	MIDISTore.setValue("xRange", 100);
+	MIDISTore.addItem(176,2,"yRange", 3000);
+	MIDISTore.setValue("yRange", 100);
+	MIDISTore.addItem(176,3,"zRange", 3000);
+	MIDISTore.setValue("zRange", 100);
+	MIDISTore.addItem(176,4,"xScale", 1000);
+	MIDISTore.setValue("xScale", 100);
+	MIDISTore.addItem(176,5,"yScale", 1000);
+	MIDISTore.setValue("yScale", 100);
+	MIDISTore.addItem(176,6,"zScale", 1000);
+	MIDISTore.setValue("zScale", 100);
+
+	//add object trackers for rendering
+	//objectTrackers
+
+}
+
+function draw() 
+{
+	var oCounter=0;
+	
+	background(0);
+	orbitControl();
+	let colourObject = color(0, 0, 0, 0);
+	ambientLight(255);
+	
+	//update random ranges
+	objectTrackers.randomRange[0] = MIDISTore.getValue("xRange");
+	objectTrackers.randomRange[1] = MIDISTore.getValue("yRange");
+	objectTrackers.randomRange[2] = MIDISTore.getValue("zRange");
+	objectTrackers.randomRange[3] = MIDISTore.getValue("xScale");
+	objectTrackers.randomRange[4] = MIDISTore.getValue("yScale");
+	objectTrackers.randomRange[5] = MIDISTore.getValue("zScale");
+	
+	//alpha level controll from keys
+	if(MIDISTore.lastKeyHit!=0)
+	{
+		//Reset that keys position
+		objectTrackers.reset(MIDISTore.lastKeyHit);
+		objectTrackers.randomizePostion(MIDISTore.lastKeyHit)
+		//grab a new colour and reset the alpha chanel to max
+		cObjectOne.getColour(Math.random()*cObjectOne._bandWidth);
+		objectTrackers.setColour(MIDISTore.lastKeyHit, cObjectOne._currentColour[0], cObjectOne._currentColour[1], cObjectOne._currentColour[2], 255);
+		MIDISTore.lastKeyHit=0;
+	}
+	//render only objects whos alphalevels are greater than 0
+	for(oCounter=0; oCounter<objectTrackers.numberOfItems; oCounter++)
+	{
+		if(objectTrackers.objectArray[oCounter][6]>0)
+		{
+			colourObject.setRed(objectTrackers.objectArray[oCounter][3]);
+			colourObject.setGreen(objectTrackers.objectArray[oCounter][4]);
+			colourObject.setBlue(objectTrackers.objectArray[oCounter][5]);
+			colourObject.setAlpha(objectTrackers.objectArray[oCounter][6]);
+			push();
+			translate(objectTrackers.objectArray[oCounter][0],objectTrackers.objectArray[oCounter][1],objectTrackers.objectArray[oCounter][2]);
+			fill(colourObject);
+			box(objectTrackers.objectArray[oCounter][8], objectTrackers.objectArray[oCounter][9], objectTrackers.objectArray[oCounter][10]);
+			pop();
+		}
+	}
+
+	//cIndex += MIDISTore.getValue("colourIncrement");
+	slowCounter = frameCount * MIDISTore.getValue("slowBy");
+	
+	//motion and fades
+	
+	for(oCounter=0; oCounter<objectTrackers.numberOfItems; oCounter++)
+	{
+		if(objectTrackers.objectArray[oCounter][6]>0)
+		{
+			if(MIDISTore.getValue("alphaFader")<objectTrackers.objectArray[oCounter][6])
+			{
+				//decrement alpha
+				objectTrackers.objectArray[oCounter][6] -= MIDISTore.getValue("alphaFader");
+				//move out into z-index
+				objectTrackers.objectArray[oCounter][2] -= MIDISTore.getValue("movementFader");
+			}
+			else
+			{
+				objectTrackers.reset(oCounter);
+			}
+		}
+	}
+	
+	
+
+}
+
+function getCircularPoints(circleX, circleY, circleR, angleFromTopLeftoRight)
+{
+	var circCoOrds = [0, 0];
+	circCoOrds[0] = circleX + Math.sin(angleFromTopLeftoRight*(Math.PI / 180))*circleR ;
+	circCoOrds[1] = circleY - Math.cos(angleFromTopLeftoRight*(Math.PI / 180))*circleR;
+	return circCoOrds;
+}
+
+
+</script>
+</html> 
